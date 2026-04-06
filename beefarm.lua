@@ -1,4 +1,4 @@
--- BSS Helper v4.0
+-- BSS Helper v5.0
 -- Rayfield + Xeno | Right CTRL = toggle GUI
 
 local Players = game:GetService("Players")
@@ -6,10 +6,10 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 
-local plr = Players.LocalPlayer
+local plr  = Players.LocalPlayer
 local char = plr.Character or plr.CharacterAdded:Wait()
 local root = char:WaitForChild("HumanoidRootPart")
-local hum = char:WaitForChild("Humanoid")
+local hum  = char:WaitForChild("Humanoid")
 
 plr.CharacterAdded:Connect(function(c)
     char = c
@@ -18,18 +18,18 @@ plr.CharacterAdded:Connect(function(c)
 end)
 
 -- ══════════════════════════════════════════════════
--- ЗАГРУЗКА RAYFIELD
+-- RAYFIELD
 -- ══════════════════════════════════════════════════
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 
 local Win = Rayfield:CreateWindow({
-    Name = "🐝 BSS Helper v4",
-    LoadingTitle = "BSS Helper",
-    LoadingSubtitle = "v4.0",
-    Theme = "Default",
+    Name                 = "🐝 BSS Helper v5",
+    LoadingTitle         = "BSS Helper",
+    LoadingSubtitle      = "v5.0",
+    Theme                = "Default",
     DisableBuildWarnings = true,
-    ConfigurationSaving = { Enabled = false },
-    KeySystem = false,
+    ConfigurationSaving  = { Enabled = false },
+    KeySystem            = false,
 })
 
 -- ══════════════════════════════════════════════════
@@ -41,12 +41,16 @@ local autoPlant     = false
 local killSnail     = false
 local killBoss      = false
 local autoSprinkler = false
+local isConverting  = false
 
 local selectedField   = "Sunflower Field"
 local selectedPlanter = "Basic Planter"
 
+-- Позиция улья — сохрани кнопкой в Configs
+local HIVE_POS = Vector3.new(0, 4, 0)
+
 -- ══════════════════════════════════════════════════
--- ПОЛЯ
+-- ДАННЫЕ ПОЛЕЙ
 -- ══════════════════════════════════════════════════
 local Fields = {
     ["Sunflower Field"]    = Vector3.new(185,  4,  -85),
@@ -76,10 +80,6 @@ local FieldNames = {
     "Mountain Top Field",
 }
 
--- Позиция улья (сдача пыльцы на мёд)
--- Замени на реальную позицию твоего улья: print(root.Position) рядом с ульем
-local HIVE_POSITION = Vector3.new(0, 4, 0)
-
 local PlanterNames = {
     "Basic Planter","Planter","Mondo Planter","Jumbo Planter",
     "Petal Planter","Magnetic Planter","Treat Planter",
@@ -87,250 +87,206 @@ local PlanterNames = {
 }
 
 -- ══════════════════════════════════════════════════
--- HELPER FUNCTIONS
+-- УТИЛИТЫ
 -- ══════════════════════════════════════════════════
+
+-- Телепорт
 local function tp(pos)
     root.CFrame = CFrame.new(pos.X, pos.Y + 3, pos.Z)
 end
 
+-- Один клик мышью
+local function click()
+    VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true,  game, 0)
+    task.wait(0.01)
+    VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 0)
+end
+
+-- Экипировка инструмента
+local function equip(name)
+    local tool = plr.Backpack:FindFirstChild(name)
+               or char:FindFirstChild(name)
+    if not tool then return false end
+    hum:EquipTool(tool)
+    task.wait(0.05)
+    return true
+end
+
+-- Активация инструмента (для спринклера/планера)
 local function useTool(name)
-    local tool = plr.Backpack:FindFirstChild(name) or char:FindFirstChild(name)
+    local tool = plr.Backpack:FindFirstChild(name)
+               or char:FindFirstChild(name)
     if not tool then return end
     hum:EquipTool(tool)
-    task.wait(0.1)
-    local handle = tool:FindFirstChild("Handle")
-    if handle then
-        local cd = handle:FindFirstChildOfClass("ClickDetector")
+    task.wait(0.05)
+    local h = tool:FindFirstChild("Handle")
+    if h then
+        local cd = h:FindFirstChildOfClass("ClickDetector")
         if cd then fireclickdetector(cd) return end
     end
     local re = tool:FindFirstChildOfClass("RemoteEvent")
     if re then re:FireServer() end
 end
 
--- Симуляция зажатого ЛКМ через VirtualInputManager
-local function holdClick(seconds)
-    VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 0)   -- нажать
-    task.wait(seconds)
-    VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 0)  -- отпустить
-end
-
 -- ══════════════════════════════════════════════════
--- ПРОВЕРКА ЗАПОЛНЕННОСТИ РЮКЗАКА
--- Пыльца хранится как NumberValue / IntValue внутри
--- папки игрока — ищем по имени
+-- ПЫЛЬЦА — ПРОВЕРКА РЮКЗАКА
 -- ══════════════════════════════════════════════════
-local function getPollenAmount()
-    -- Способ 1: через leaderstats или BeeSwarmStats
-    local stats = plr:FindFirstChild("BeeSwarmStats")
-               or plr:FindFirstChild("leaderstats")
-               or plr:FindFirstChild("Stats")
-    if stats then
-        local pollen = stats:FindFirstChild("Pollen")
-                    or stats:FindFirstChild("Collected Pollen")
-        if pollen then
-            return pollen.Value
+local function getPollen()
+    for _, loc in ipairs({
+        plr:FindFirstChild("BeeSwarmStats"),
+        plr:FindFirstChild("leaderstats"),
+        plr:FindFirstChild("Stats"),
+        plr:FindFirstChild("PlayerData"),
+    }) do
+        if loc then
+            for _, name in ipairs({"Pollen","Collected Pollen","CollectedPollen"}) do
+                local v = loc:FindFirstChild(name)
+                if v then return v.Value end
+            end
         end
-    end
-    -- Способ 2: через PlayerGui / PlayerScripts
-    local data = plr:FindFirstChild("PlayerData")
-    if data then
-        local p = data:FindFirstChild("Pollen")
-        if p then return p.Value end
     end
     return 0
 end
 
 local function getMaxPollen()
-    local stats = plr:FindFirstChild("BeeSwarmStats")
-               or plr:FindFirstChild("leaderstats")
-               or plr:FindFirstChild("Stats")
-    if stats then
-        local cap = stats:FindFirstChild("PollenCapacity")
-                 or stats:FindFirstChild("Bag Size")
-                 or stats:FindFirstChild("BagSize")
-        if cap then return cap.Value end
+    for _, loc in ipairs({
+        plr:FindFirstChild("BeeSwarmStats"),
+        plr:FindFirstChild("leaderstats"),
+        plr:FindFirstChild("Stats"),
+    }) do
+        if loc then
+            for _, name in ipairs({"PollenCapacity","Bag Size","BagSize","Capacity"}) do
+                local v = loc:FindFirstChild(name)
+                if v then return v.Value end
+            end
+        end
     end
-    return 100 -- дефолт если не нашли
+    return 100
 end
 
-local function isBagFull()
-    local current = getPollenAmount()
-    local max     = getMaxPollen()
-    -- Считаем заполненным если >= 95%
-    return current >= (max * 0.95)
+local function bagFull()
+    return getPollen() >= getMaxPollen() * 0.95
 end
 
 -- ══════════════════════════════════════════════════
--- СДАЧА ПЫЛЬЦЫ НА МЁД
--- Телепортируется к улью и взаимодействует с ним
+-- СДАЧА ПЫЛЬЦЫ
 -- ══════════════════════════════════════════════════
-local isConverting = false -- флаг чтобы не запускать дважды
-
-local function convertPollenToHoney()
+local function convertPollen()
     if isConverting then return end
     isConverting = true
 
-    local prevFarm = autoFarm
-    local prevDig  = autoDig
-
-    -- Остановить фарм и коп на время сдачи
-    autoFarm = false
+    local wasDigging = autoDig
+    local wasFarming = autoFarm
     autoDig  = false
+    autoFarm = false
 
-    Rayfield:Notify({
-        Title   = "🍯 Сдача пыльцы",
-        Content = "Телепорт к улью...",
-        Duration = 3,
-    })
+    Rayfield:Notify({ Title="🍯 Рюкзак полный", Content="Летим к улью...", Duration=3 })
 
-    -- Телепортируемся к улью
-    tp(HIVE_POSITION)
-    task.wait(0.5)
+    tp(HIVE_POS)
+    task.wait(0.8)
 
-    -- Ищем улей в workspace
-    local hive = workspace:FindFirstChild("Hive")
-              or workspace:FindFirstChild("MyHive")
-              or workspace:FindFirstChild("BasicHive")
+    -- Ищем улей
+    local hive = nil
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        local n = obj.Name:lower()
+        if n:find("hive") then
+            hive = obj
+            break
+        end
+    end
 
     if hive then
-        -- Ищем ClickDetector или ProximityPrompt на улье
-        local cd = hive:FindFirstChildOfClass("ClickDetector")
-                or (hive.PrimaryPart and hive.PrimaryPart:FindFirstChildOfClass("ClickDetector"))
-        local pp = hive:FindFirstChildOfClass("ProximityPrompt")
-                or (hive.PrimaryPart and hive.PrimaryPart:FindFirstChildOfClass("ProximityPrompt"))
-
-        if cd then
-            fireclickdetector(cd)
-            task.wait(0.3)
-        elseif pp then
-            fireproximityprompt(pp)
-            task.wait(0.3)
-        else
-            -- Fallback: ищем по всем детям улья
-            for _, child in ipairs(hive:GetDescendants()) do
-                local childCd = child:FindFirstChildOfClass("ClickDetector")
-                if childCd then
-                    fireclickdetector(childCd)
-                    task.wait(0.1)
-                end
-                local childPp = child:FindFirstChildOfClass("ProximityPrompt")
-                if childPp then
-                    fireproximityprompt(childPp)
-                    task.wait(0.1)
-                end
-            end
+        -- Пробуем все способы взаимодействия
+        for _, obj in ipairs(hive:GetDescendants()) do
+            local cd = obj:FindFirstChildOfClass("ClickDetector")
+            if cd then fireclickdetector(cd) task.wait(0.1) end
+            local pp = obj:FindFirstChildOfClass("ProximityPrompt")
+            if pp then fireproximityprompt(pp) task.wait(0.1) end
         end
-
-        Rayfield:Notify({
-            Title   = "🍯 Готово!",
-            Content = "Пыльца сдана в мёд!",
-            Duration = 3,
-        })
+        Rayfield:Notify({ Title="🍯 Готово!", Content="Пыльца сдана!", Duration=3 })
     else
-        Rayfield:Notify({
-            Title   = "⚠️ Улей не найден",
-            Content = "Установи координаты улья вручную!\nprint(root.Position) рядом с ульем",
-            Duration = 5,
-        })
-        warn("[BSS] Улей не найден в workspace! Установи HIVE_POSITION вручную.")
-        print("[BSS] Твоя позиция сейчас:", root.Position)
+        Rayfield:Notify({ Title="⚠️ Улей не найден", Content="Встань у улья → Configs → Сохранить улей", Duration=5 })
+        warn("[BSS] Улей не найден! Позиция сейчас:", root.Position)
     end
 
-    task.wait(1)
+    task.wait(0.5)
 
-    -- Возвращаемся к полю
-    local fieldCenter = Fields[selectedField]
-    if fieldCenter then
-        tp(fieldCenter)
-        task.wait(0.5)
-    end
+    -- Возврат к полю
+    local fc = Fields[selectedField]
+    if fc then tp(fc) end
+    task.wait(0.5)
 
-    -- Восстановить фарм и коп
-    autoFarm = prevFarm
-    autoDig  = prevDig
+    autoDig  = wasDigging
+    autoFarm = wasFarming
     isConverting = false
 end
 
 -- ══════════════════════════════════════════════════
--- АВТО-КОП — ЗАЖАТЫЙ ЛКМ + СДАЧА ПРИ ПОЛНОМ РЮКЗАКЕ
+-- АВТО КОП — БЫСТРЫЙ СПАМ ЛКМ
 -- ══════════════════════════════════════════════════
-local digTask = nil -- хранит coroutine копа
-
-local function startDig()
-    -- Запускаем в отдельном потоке чтобы не блокировать Heartbeat
-    digTask = task.spawn(function()
-        while autoDig do
-            -- Если рюкзак полный — сдать пыльцу
-            if isBagFull() then
-                Rayfield:Notify({
-                    Title   = "🎒 Рюкзак полный!",
-                    Content = "Идём сдавать пыльцу...",
-                    Duration = 3,
-                })
-                convertPollenToHoney()
-            end
-
-            -- Экипируем совок
-            local scoop = plr.Backpack:FindFirstChild("Scoop")
-                       or char:FindFirstChild("Scoop")
-            if scoop then
-                hum:EquipTool(scoop)
-                task.wait(0.1)
-                -- Зажимаем ЛКМ на 0.5 секунды (имитация удержания)
-                holdClick(0.5)
-                task.wait(0.1)
+task.spawn(function()
+    while true do
+        task.wait(0.01)
+        if autoDig and not isConverting then
+            -- Проверка рюкзака
+            if bagFull() then
+                task.spawn(convertPollen)
+                task.wait(1)
             else
-                -- Совка нет в рюкзаке
-                task.wait(0.5)
+                -- Экипируем совок и спамим клики
+                if equip("Scoop") then
+                    -- 50 кликов подряд без задержки = максимальная скорость
+                    for i = 1, 50 do
+                        if not autoDig or isConverting then break end
+                        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true,  game, 0)
+                        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 0)
+                        -- task.wait(0) -- убери комментарий если лагает
+                    end
+                end
             end
         end
-    end)
-end
+    end
+end)
 
 -- ══════════════════════════════════════════════════
 -- ФАРМ — СЕТКА 5x5
 -- ══════════════════════════════════════════════════
-local farmPoints = {}
-local farmIdx    = 1
-local farmTimer  = 0
+local farmPts = {}
+local farmIdx = 1
+local farmT   = 0
 
-local function buildGrid(center)
-    farmPoints = {}
-    farmIdx    = 1
+local function buildGrid(c)
+    farmPts = {}
+    farmIdx = 1
     for x = -10, 10, 5 do
         for z = -10, 10, 5 do
-            table.insert(farmPoints, Vector3.new(
-                center.X + x,
-                center.Y,
-                center.Z + z
-            ))
+            table.insert(farmPts, Vector3.new(c.X + x, c.Y, c.Z + z))
         end
     end
 end
 
 -- ══════════════════════════════════════════════════
--- ГЛАВНЫЙ HEARTBEAT
+-- ГЛАВНЫЙ ЛУП
 -- ══════════════════════════════════════════════════
 RunService.Heartbeat:Connect(function(dt)
 
-    -- ── АВТО ФАРМ ──────────────────────────────────
+    -- АВТО ФАРМ
     if autoFarm and not isConverting then
-        farmTimer += dt
-        if farmTimer >= 0.35 then
-            farmTimer = 0
-            local center = Fields[selectedField]
-            if center then
-                if #farmPoints == 0 then buildGrid(center) end
-                local pt = farmPoints[farmIdx]
+        farmT += dt
+        if farmT >= 0.3 then
+            farmT = 0
+            local c = Fields[selectedField]
+            if c then
+                if #farmPts == 0 then buildGrid(c) end
+                local pt = farmPts[farmIdx]
                 root.CFrame = CFrame.new(pt.X, pt.Y + 3, pt.Z)
-                farmIdx = farmIdx % #farmPoints + 1
+                farmIdx = farmIdx % #farmPts + 1
                 -- Сбор токенов
                 for _, v in ipairs(workspace:GetDescendants()) do
                     if v:IsA("BasePart") then
                         local n = v.Name:lower()
-                        if n:find("token") or n:find("pollen")
-                        or n:find("honey") or n:find("nectar")
-                        or n:find("drop") then
+                        if (n:find("token") or n:find("pollen")
+                        or  n:find("nectar") or n:find("drop")) then
                             if (v.Position - root.Position).Magnitude < 8 then
                                 root.CFrame = CFrame.new(v.Position)
                             end
@@ -339,21 +295,19 @@ RunService.Heartbeat:Connect(function(dt)
                 end
             end
         end
-    else
-        if not autoFarm then
-            farmPoints = {}
-            farmIdx    = 1
-            farmTimer  = 0
-        end
+    elseif not autoFarm then
+        farmPts = {}
+        farmIdx = 1
+        farmT   = 0
     end
 
-    -- ── АВТО СПРИНКЛЕР ─────────────────────────────
+    -- АВТО СПРИНКЛЕР
     if autoSprinkler then
         useTool("Sprinkler")
         task.wait(10)
     end
 
-    -- ── УБИЙСТВО УЛИТКИ ────────────────────────────
+    -- УБИЙСТВО УЛИТКИ
     if killSnail then
         local snail = workspace:FindFirstChild("StumpSnail")
                    or workspace:FindFirstChild("Stump Snail")
@@ -369,10 +323,9 @@ RunService.Heartbeat:Connect(function(dt)
         task.wait(0.2)
     end
 
-    -- ── УБИЙСТВО БОССОВ ────────────────────────────
+    -- УБИЙСТВО БОССОВ
     if killBoss then
-        local bossNames = {"ViciousBee","Vicious Bee","MondoChick","Mondo Chick"}
-        for _, bn in ipairs(bossNames) do
+        for _, bn in ipairs({"ViciousBee","Vicious Bee","MondoChick","Mondo Chick"}) do
             local boss = workspace:FindFirstChild(bn)
             if boss then
                 local r = boss:FindFirstChild("HumanoidRootPart") or boss.PrimaryPart
@@ -391,10 +344,10 @@ RunService.Heartbeat:Connect(function(dt)
         task.wait(0.2)
     end
 
-    -- ── АВТО ПОСАДКА ───────────────────────────────
+    -- АВТО ПОСАДКА
     if autoPlant then
-        local center = Fields[selectedField]
-        if center and (center - root.Position).Magnitude < 30 then
+        local c = Fields[selectedField]
+        if c and (c - root.Position).Magnitude < 30 then
             useTool(selectedPlanter)
         end
         task.wait(5)
@@ -403,64 +356,60 @@ RunService.Heartbeat:Connect(function(dt)
 end)
 
 -- ══════════════════════════════════════════════════
--- UI ВКЛАДКИ
+-- UI
 -- ══════════════════════════════════════════════════
 
--- ── MAIN ───────────────────────────────────────────
-local TabMain = Win:CreateTab("🏠 Main", 4483345998)
-TabMain:CreateSection("Утилиты")
+-- MAIN
+local T1 = Win:CreateTab("🏠 Main", 4483345998)
+T1:CreateSection("Утилиты")
 
-TabMain:CreateToggle({
+T1:CreateToggle({
     Name = "Auto Sprinkler",
     CurrentValue = false,
     Callback = function(v) autoSprinkler = v end,
 })
 
-TabMain:CreateButton({
+T1:CreateButton({
     Name = "⚡ Телепорт к полю",
     Callback = function()
         local c = Fields[selectedField]
-        if c then
-            tp(c)
-            Rayfield:Notify({ Title="TP", Content=selectedField, Duration=2 })
-        end
+        if c then tp(c) end
+        Rayfield:Notify({ Title="TP", Content=selectedField, Duration=2 })
     end,
 })
 
-TabMain:CreateButton({
+T1:CreateButton({
     Name = "🍯 Сдать пыльцу вручную",
+    Callback = function() task.spawn(convertPollen) end,
+})
+
+T1:CreateButton({
+    Name = "📍 Напечатать позицию",
     Callback = function()
-        task.spawn(convertPollenToHoney)
+        print("[POS]", root.Position)
+        Rayfield:Notify({ Title="Позиция", Content=tostring(root.Position), Duration=3 })
     end,
 })
 
-TabMain:CreateButton({
-    Name = "📍 Моя позиция (консоль)",
-    Callback = function()
-        print("[BSS] Позиция:", root.Position)
-        Rayfield:Notify({ Title="Debug", Content=tostring(root.Position), Duration=3 })
-    end,
-})
+-- FARMING
+local T2 = Win:CreateTab("🌻 Farming", 4483345998)
+T2:CreateSection("Поле")
 
--- ── FARMING ────────────────────────────────────────
-local TabFarm = Win:CreateTab("🌻 Farming", 4483345998)
-TabFarm:CreateSection("Настройки поля")
-
-TabFarm:CreateDropdown({
-    Name = "Select Field",
-    Options = FieldNames,
-    CurrentOption = {"Sunflower Field"},
+T2:CreateDropdown({
+    Name            = "Select Field",
+    Options         = FieldNames,
+    CurrentOption   = {"Sunflower Field"},
     MultipleOptions = false,
-    Callback = function(v)
+    Callback        = function(v)
         selectedField = type(v) == "table" and v[1] or v
         buildGrid(Fields[selectedField])
-        Rayfield:Notify({ Title="Field", Content="✅ "..selectedField, Duration=2 })
+        Rayfield:Notify({ Title="Поле", Content="✅ "..selectedField, Duration=2 })
     end,
 })
 
-TabFarm:CreateSection("Действия")
+T2:CreateSection("Действия")
 
-TabFarm:CreateToggle({
+T2:CreateToggle({
     Name = "Auto-Farm",
     CurrentValue = false,
     Callback = function(v)
@@ -468,52 +417,47 @@ TabFarm:CreateToggle({
         if v then
             local c = Fields[selectedField]
             if c then tp(c) buildGrid(c) end
-            Rayfield:Notify({ Title="Farm", Content="🌻 "..selectedField, Duration=3 })
+            Rayfield:Notify({ Title="Farm ON", Content=selectedField, Duration=3 })
         end
     end,
 })
 
-TabFarm:CreateToggle({
-    Name = "Auto-Dig (ЛКМ + авто сдача мёда)",
+T2:CreateToggle({
+    Name = "Auto-Dig 💥 (макс скорость)",
     CurrentValue = false,
     Callback = function(v)
         autoDig = v
         if v then
-            startDig()
-            Rayfield:Notify({
-                Title   = "Auto-Dig",
-                Content = "⛏️ Коп запущен!\nПри полном рюкзаке — автосдача мёда",
-                Duration = 4,
-            })
+            Rayfield:Notify({ Title="Dig ON", Content="⛏️ Спам ЛКМ запущен!", Duration=3 })
         end
     end,
 })
 
--- ── PLANTERS ───────────────────────────────────────
-local TabPlant = Win:CreateTab("🪴 Planters", 4483345998)
-TabPlant:CreateSection("Настройки")
+-- PLANTERS
+local T3 = Win:CreateTab("🪴 Planters", 4483345998)
+T3:CreateSection("Планер")
 
-TabPlant:CreateDropdown({
-    Name = "Select Planter",
-    Options = PlanterNames,
-    CurrentOption = {"Basic Planter"},
+T3:CreateDropdown({
+    Name            = "Select Planter",
+    Options         = PlanterNames,
+    CurrentOption   = {"Basic Planter"},
     MultipleOptions = false,
-    Callback = function(v)
+    Callback        = function(v)
         selectedPlanter = type(v) == "table" and v[1] or v
     end,
 })
 
-TabPlant:CreateToggle({
+T3:CreateToggle({
     Name = "Auto Plant",
     CurrentValue = false,
     Callback = function(v) autoPlant = v end,
 })
 
--- ── COMBAT ─────────────────────────────────────────
-local TabCombat = Win:CreateTab("⚔️ Combat", 4483345998)
-TabCombat:CreateSection("Враги")
+-- COMBAT
+local T4 = Win:CreateTab("⚔️ Combat", 4483345998)
+T4:CreateSection("Враги")
 
-TabCombat:CreateToggle({
+T4:CreateToggle({
     Name = "Kill Stump Snail",
     CurrentValue = false,
     Callback = function(v)
@@ -522,63 +466,27 @@ TabCombat:CreateToggle({
     end,
 })
 
-TabCombat:CreateToggle({
+T4:CreateToggle({
     Name = "Kill Bosses",
     CurrentValue = false,
     Callback = function(v) killBoss = v end,
 })
 
--- ── CONFIGS ────────────────────────────────────────
-local TabCfg = Win:CreateTab("⚙️ Configs", 4483345998)
-TabCfg:CreateSection("Улей")
+-- CONFIGS
+local T5 = Win:CreateTab("⚙️ Configs", 4483345998)
+T5:CreateSection("Улей")
 
--- Поле для ввода координат улья вручную
-TabCfg:CreateInput({
-    Name        = "Hive X",
-    PlaceholderText = tostring(HIVE_POSITION.X),
-    RemoveTextAfterFocusLost = false,
-    Callback    = function(v)
-        local n = tonumber(v)
-        if n then HIVE_POSITION = Vector3.new(n, HIVE_POSITION.Y, HIVE_POSITION.Z) end
-    end,
-})
-
-TabCfg:CreateInput({
-    Name        = "Hive Y",
-    PlaceholderText = tostring(HIVE_POSITION.Y),
-    RemoveTextAfterFocusLost = false,
-    Callback    = function(v)
-        local n = tonumber(v)
-        if n then HIVE_POSITION = Vector3.new(HIVE_POSITION.X, n, HIVE_POSITION.Z) end
-    end,
-})
-
-TabCfg:CreateInput({
-    Name        = "Hive Z",
-    PlaceholderText = tostring(HIVE_POSITION.Z),
-    RemoveTextAfterFocusLost = false,
-    Callback    = function(v)
-        local n = tonumber(v)
-        if n then HIVE_POSITION = Vector3.new(HIVE_POSITION.X, HIVE_POSITION.Y, n) end
-    end,
-})
-
-TabCfg:CreateButton({
-    Name = "📌 Сохранить позицию улья (я рядом с ним)",
+T5:CreateButton({
+    Name = "📌 Сохранить позицию улья (встань рядом)",
     Callback = function()
-        HIVE_POSITION = root.Position
-        Rayfield:Notify({
-            Title   = "🍯 Улей сохранён",
-            Content = tostring(HIVE_POSITION),
-            Duration = 3,
-        })
-        print("[BSS] HIVE_POSITION сохранён:", HIVE_POSITION)
+        HIVE_POS = root.Position
+        print("[BSS] Улей сохранён:", HIVE_POS)
+        Rayfield:Notify({ Title="🍯 Улей", Content="Сохранено: "..tostring(HIVE_POS), Duration=3 })
     end,
 })
 
-TabCfg:CreateSection("Инфо")
-TabCfg:CreateLabel("BSS Helper v4.0 | Rayfield | Xeno")
-TabCfg:CreateLabel("Right CTRL = открыть / закрыть GUI")
+T5:CreateSection("Инфо")
+T5:CreateLabel("BSS Helper v5.0 | Right CTRL = GUI")
 
 -- ══════════════════════════════════════════════════
 -- RIGHT CTRL
@@ -590,11 +498,9 @@ UserInputService.InputBegan:Connect(function(input, gp)
     end
 end)
 
--- ══════════════════════════════════════════════════
 -- СТАРТ
--- ══════════════════════════════════════════════════
 Rayfield:Notify({
-    Title   = "🐝 BSS Helper v4.0",
-    Content = "Загружено! Встань рядом с ульем\nи нажми 'Сохранить позицию улья'",
+    Title   = "🐝 BSS Helper v5.0",
+    Content = "Загружено!\n1. Встань у улья\n2. Configs → Сохранить улей\n3. Включай фичи",
     Duration = 6,
 })
