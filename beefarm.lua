@@ -1,61 +1,58 @@
--- ╔══════════════════════════════════════════════════════════╗
--- ║          BSS Helper Script | Rayfield UI Library         ║
--- ║          Xeno Executor Compatible                        ║
--- ║          Toggle GUI: Right CTRL                          ║
--- ╚══════════════════════════════════════════════════════════╝
+-- BSS Helper v3.0
+-- Rayfield + Xeno | Right CTRL = toggle GUI
 
--- [ SERVICES ]
-local Players          = game:GetService("Players")
-local RunService       = game:GetService("RunService")
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 
-local player   = Players.LocalPlayer
-local char     = player.Character or player.CharacterAdded:Wait()
-local rootPart = char:WaitForChild("HumanoidRootPart")
-local humanoid = char:WaitForChild("Humanoid")
+local plr = Players.LocalPlayer
+local char = plr.Character or plr.CharacterAdded:Wait()
+local root = char:WaitForChild("HumanoidRootPart")
+local hum = char:WaitForChild("Humanoid")
+
+-- Обновление при респауне
+plr.CharacterAdded:Connect(function(c)
+    char = c
+    root = c:WaitForChild("HumanoidRootPart")
+    hum = c:WaitForChild("Humanoid")
+end)
 
 -- ══════════════════════════════════════════════════
---  LOAD RAYFIELD
+-- ЗАГРУЗКА RAYFIELD
 -- ══════════════════════════════════════════════════
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 
--- [ CREATE WINDOW ]
-local Window = Rayfield:CreateWindow({
-    Name                   = "🐝 BSS Helper",
-    Icon                   = 0,
-    LoadingTitle           = "🐝 BSS Helper",
-    LoadingSubtitle        = "Xeno Compatible | v2.0",
-    Theme                  = "Default",
-    DisableRayfieldPrompts = false,
-    DisableBuildWarnings   = true,
-    ConfigurationSaving    = {
-        Enabled    = true,
-        FolderName = "BSSHelper",
-        FileName   = "Config",
+local Win = Rayfield:CreateWindow({
+    Name = "🐝 BSS Helper v3",
+    LoadingTitle = "BSS Helper",
+    LoadingSubtitle = "v3.0",
+    Theme = "Default",
+    DisableBuildWarnings = true,
+    ConfigurationSaving = {
+        Enabled = false,
     },
     KeySystem = false,
 })
 
 -- ══════════════════════════════════════════════════
---  GLOBAL STATE
+-- СОСТОЯНИЯ (вкл/выкл)
 -- ══════════════════════════════════════════════════
-local State = {
-    AutoFarm       = false,
-    AutoDig        = false,
-    AutoPlant      = false,
-    KillStump      = false,
-    KillBosses     = false,
-    AutoSprinkler  = false,
-    SelectedField  = "Sunflower Field",
-    SelectedPlanter = "Basic Planter",
-}
+local autoFarm      = false
+local autoDig       = false
+local autoPlant     = false
+local killSnail     = false
+local killBoss      = false
+local autoSprinkler = false
+
+local selectedField   = "Sunflower Field"
+local selectedPlanter = "Basic Planter"
 
 -- ══════════════════════════════════════════════════
---  ПОЛЯ BSS — координаты центров
---  (встань на поле и напиши print(rootPart.Position)
---   чтобы уточнить координаты под свой сервер)
+-- ПОЛЯ — КООРДИНАТЫ
+-- Чтобы узнать точные координаты встань на поле
+-- и запусти: print(root.Position) в консоли
 -- ══════════════════════════════════════════════════
-local FieldPositions = {
+local Fields = {
     ["Sunflower Field"]    = Vector3.new(185,  4,  -85),
     ["Dandelion Field"]    = Vector3.new(68,   4,  -93),
     ["Mushroom Field"]     = Vector3.new(-29,  4, -152),
@@ -74,478 +71,313 @@ local FieldPositions = {
     ["Mountain Top Field"] = Vector3.new(0,    65, -480),
 }
 
--- Список всех полей для дропдауна
-local Fields = {}
-for name, _ in pairs(FieldPositions) do
-    table.insert(Fields, name)
-end
-table.sort(Fields) -- сортировка по алфавиту
+local FieldNames = {
+    "Sunflower Field", "Dandelion Field", "Mushroom Field",
+    "Blue Flower Field", "Clover Field", "Spider Field",
+    "Strawberry Field", "Bamboo Field", "Pineapple Field",
+    "Stump Field", "Coconut Field", "Pumpkin Field",
+    "Pine Tree Forest", "Rose Field", "Pepper Field",
+    "Mountain Top Field",
+}
 
--- Список планеров
-local PlanterList = {
-    "Basic Planter",
-    "Planter",
-    "Mondo Planter",
-    "Jumbo Planter",
-    "Petal Planter",
-    "Magnetic Planter",
-    "Treat Planter",
-    "Porcelain Planter",
-    "Diamond Planter",
+local PlanterNames = {
+    "Basic Planter", "Planter", "Mondo Planter", "Jumbo Planter",
+    "Petal Planter", "Magnetic Planter", "Treat Planter",
+    "Porcelain Planter", "Diamond Planter",
 }
 
 -- ══════════════════════════════════════════════════
---  HELPER FUNCTIONS
+-- ТЕЛЕПОРТ
 -- ══════════════════════════════════════════════════
-
--- Телепорт в позицию (чуть выше чтобы не застрять в полу)
-local function tpTo(pos)
-    if rootPart and pos then
-        rootPart.CFrame = CFrame.new(
-            pos.X,
-            pos.Y + 3,
-            pos.Z
-        )
-    end
+local function tp(pos)
+    root.CFrame = CFrame.new(pos.X, pos.Y + 3, pos.Z)
 end
 
--- Активация инструмента из рюкзака
-local function fireTool(toolName)
-    local tool = player.Backpack:FindFirstChild(toolName)
-               or char:FindFirstChild(toolName)
+-- ══════════════════════════════════════════════════
+-- АКТИВАЦИЯ ИНСТРУМЕНТА
+-- ══════════════════════════════════════════════════
+local function useTool(name)
+    local tool = plr.Backpack:FindFirstChild(name) or char:FindFirstChild(name)
     if not tool then return end
-    humanoid:EquipTool(tool)
+    hum:EquipTool(tool)
     task.wait(0.1)
+    -- Пробуем ClickDetector
     local handle = tool:FindFirstChild("Handle")
     if handle then
-        local click = handle:FindFirstChildOfClass("ClickDetector")
-        if click then
-            fireclickdetector(click)
+        local cd = handle:FindFirstChildOfClass("ClickDetector")
+        if cd then
+            fireclickdetector(cd)
             return
         end
     end
-    local remote = tool:FindFirstChildOfClass("RemoteEvent")
-    if remote then
-        remote:FireServer()
-    end
+    -- Пробуем RemoteEvent
+    local re = tool:FindFirstChildOfClass("RemoteEvent")
+    if re then re:FireServer() end
 end
 
 -- ══════════════════════════════════════════════════
---  АВТО-ФАРМ — ОСНОВНАЯ ЛОГИКА
---  Телепортируется по сетке точек внутри поля
---  и собирает всё в радиусе 8 стадов
+-- ФАРМ — СЕТКА ТОЧЕК 5x5 ВНУТРИ ПОЛЯ
 -- ══════════════════════════════════════════════════
+local farmPoints = {}
+local farmIdx    = 1
+local farmTimer  = 0
 
--- Генерируем сетку точек для обхода поля (5x5 = 25 точек)
-local function getFieldGrid(center)
-    local points = {}
-    local step   = 5   -- шаг между точками в стадах
-    local count  = 5   -- точек по каждой оси
-    local half   = (count - 1) * step / 2
-
-    for x = 0, count - 1 do
-        for z = 0, count - 1 do
-            table.insert(points, Vector3.new(
-                center.X + (x * step - half),
+local function buildGrid(center)
+    farmPoints = {}
+    farmIdx    = 1
+    -- 5x5 сетка с шагом 5 стадов
+    for x = -10, 10, 5 do
+        for z = -10, 10, 5 do
+            table.insert(farmPoints, Vector3.new(
+                center.X + x,
                 center.Y,
-                center.Z + (z * step - half)
+                center.Z + z
             ))
         end
     end
-    return points
 end
 
--- Проверка — является ли объект токеном/пыльцой
-local function isCollectable(obj)
-    if not obj:IsA("BasePart") and not obj:IsA("Model") then
-        return false
-    end
-    local n = obj.Name:lower()
-    return n:find("token")    ~= nil
-        or n:find("pollen")   ~= nil
-        or n:find("honey")    ~= nil
-        or n:find("collect")  ~= nil
-        or n:find("drop")     ~= nil
-        or n:find("nectar")   ~= nil
-end
-
--- Основной фарм-луп
-local farmGridIndex = 1
-local farmGrid      = {}
-local farmTimer     = 0
-local FARM_INTERVAL = 0.4  -- секунд между телепортами
-
+-- Главный луп
 RunService.Heartbeat:Connect(function(dt)
-    if not State.AutoFarm then
-        farmGridIndex = 1  -- сбросить позицию при выключении
-        return
-    end
 
-    farmTimer += dt
-    if farmTimer < FARM_INTERVAL then return end
-    farmTimer = 0
+    -- ── АВТО ФАРМ ──────────────────────────────────
+    if autoFarm then
+        farmTimer += dt
+        if farmTimer >= 0.35 then
+            farmTimer = 0
 
-    -- Получаем/обновляем сетку для выбранного поля
-    local center = FieldPositions[State.SelectedField]
-    if not center then return end
+            local center = Fields[selectedField]
+            if center then
+                -- Пересоздать сетку если пустая
+                if #farmPoints == 0 then buildGrid(center) end
 
-    -- Пересчитать сетку если она пустая
-    if #farmGrid == 0 then
-        farmGrid = getFieldGrid(center)
-    end
+                -- Телепорт к точке сетки
+                local pt = farmPoints[farmIdx]
+                root.CFrame = CFrame.new(pt.X, pt.Y + 3, pt.Z)
+                farmIdx = farmIdx % #farmPoints + 1
 
-    -- Телепортируемся к следующей точке сетки
-    local targetPoint = farmGrid[farmGridIndex]
-    if targetPoint then
-        rootPart.CFrame = CFrame.new(
-            targetPoint.X,
-            center.Y + 3,
-            targetPoint.Z
-        )
-    end
-
-    -- Переходим к следующей точке (по кругу)
-    farmGridIndex += 1
-    if farmGridIndex > #farmGrid then
-        farmGridIndex = 1
-    end
-
-    -- Собираем все коллектаблы в радиусе 8 стадов
-    task.wait(0.05)
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        if isCollectable(obj) then
-            local part = obj:IsA("BasePart") and obj
-                      or obj:FindFirstChildOfClass("BasePart")
-            if part then
-                local dist = (part.Position - rootPart.Position).Magnitude
-                if dist < 8 then
-                    -- Телепортируемся прямо на токен
-                    rootPart.CFrame = CFrame.new(part.Position)
-                    task.wait(0.03)
+                -- Сбор токенов/пыльцы рядом
+                for _, v in ipairs(workspace:GetDescendants()) do
+                    if v:IsA("BasePart") then
+                        local n = v.Name:lower()
+                        if  n:find("token")
+                         or n:find("pollen")
+                         or n:find("honey")
+                         or n:find("nectar")
+                         or n:find("drop") then
+                            if (v.Position - root.Position).Magnitude < 8 then
+                                root.CFrame = CFrame.new(v.Position)
+                            end
+                        end
+                    end
                 end
             end
-        end
-    end
-end)
-
--- Сбросить сетку при смене поля
-local function resetFarmGrid()
-    farmGrid      = {}
-    farmGridIndex = 1
-end
-
--- ══════════════════════════════════════════════════
---  TAB 1 — MAIN
--- ══════════════════════════════════════════════════
-local MainTab = Window:CreateTab("🏠 Main", 4483345998)
-MainTab:CreateSection("Sprinkler")
-
-MainTab:CreateToggle({
-    Name         = "Auto Sprinkler",
-    CurrentValue = false,
-    Flag         = "AutoSprinkler",
-    Callback     = function(val)
-        State.AutoSprinkler = val
-    end,
-})
-
-local sprinklerTimer = 0
-RunService.Heartbeat:Connect(function(dt)
-    if not State.AutoSprinkler then return end
-    sprinklerTimer += dt
-    if sprinklerTimer >= 10 then
-        sprinklerTimer = 0
-        fireTool("Sprinkler")
-        task.wait(0.5)
-    end
-end)
-
--- ══════════════════════════════════════════════════
---  TAB 2 — FARMING
--- ══════════════════════════════════════════════════
-local FarmTab = Window:CreateTab("🌻 Farming", 4483345998)
-FarmTab:CreateSection("Field Settings")
-
-FarmTab:CreateDropdown({
-    Name            = "Select Field",
-    Options         = Fields,
-    CurrentOption   = {"Sunflower Field"},
-    MultipleOptions = false,
-    Flag            = "SelectedField",
-    Callback        = function(val)
-        State.SelectedField = type(val) == "table" and val[1] or val
-        resetFarmGrid()  -- пересчитать сетку для нового поля
-        Rayfield:Notify({
-            Title    = "Field Changed",
-            Content  = "✅ Выбрано: " .. State.SelectedField,
-            Duration = 2,
-        })
-    end,
-})
-
-FarmTab:CreateSection("Actions")
-
-FarmTab:CreateToggle({
-    Name         = "Auto-Farm",
-    CurrentValue = false,
-    Flag         = "AutoFarm",
-    Callback     = function(val)
-        State.AutoFarm = val
-        if val then
-            -- Телепортируемся к полю сразу при включении
-            local center = FieldPositions[State.SelectedField]
-            if center then tpTo(center) end
-            resetFarmGrid()
-            Rayfield:Notify({
-                Title    = "Auto-Farm",
-                Content  = "🌻 Фарм запущен: " .. State.SelectedField,
-                Duration = 3,
-            })
-        else
-            Rayfield:Notify({
-                Title    = "Auto-Farm",
-                Content  = "⛔ Фарм остановлен",
-                Duration = 2,
-            })
-        end
-    end,
-})
-
--- Авто-коп
-local digTimer = 0
-FarmTab:CreateToggle({
-    Name         = "Auto-Dig",
-    CurrentValue = false,
-    Flag         = "AutoDig",
-    Callback     = function(val)
-        State.AutoDig = val
-    end,
-})
-
-RunService.Heartbeat:Connect(function(dt)
-    if not State.AutoDig then return end
-    digTimer += dt
-    if digTimer < 0.15 then return end
-    digTimer = 0
-    fireTool("Scoop")
-end)
-
--- ══════════════════════════════════════════════════
---  TAB 3 — PLANTERS
--- ══════════════════════════════════════════════════
-local PlantTab = Window:CreateTab("🪴 Planters", 4483345998)
-PlantTab:CreateSection("Planter Settings")
-
-PlantTab:CreateDropdown({
-    Name            = "Select Planter",
-    Options         = PlanterList,
-    CurrentOption   = {"Basic Planter"},
-    MultipleOptions = false,
-    Flag            = "SelectedPlanter",
-    Callback        = function(val)
-        State.SelectedPlanter = type(val) == "table" and val[1] or val
-    end,
-})
-
-PlantTab:CreateSection("Auto Plant")
-
-local plantTimer = 0
-PlantTab:CreateToggle({
-    Name         = "Auto Plant",
-    CurrentValue = false,
-    Flag         = "AutoPlant",
-    Callback     = function(val)
-        State.AutoPlant = val
-    end,
-})
-
-RunService.Heartbeat:Connect(function(dt)
-    if not State.AutoPlant then return end
-    plantTimer += dt
-    if plantTimer < 5 then return end
-    plantTimer = 0
-
-    local nearField = false
-    for _, pos in pairs(FieldPositions) do
-        if (pos - rootPart.Position).Magnitude < 30 then
-            nearField = true
-            break
-        end
-    end
-
-    if nearField then
-        fireTool(State.SelectedPlanter)
-        task.wait(0.3)
-    end
-end)
-
--- ══════════════════════════════════════════════════
---  TAB 4 — COMBAT
--- ══════════════════════════════════════════════════
-local CombatTab = Window:CreateTab("⚔️ Combat", 4483345998)
-CombatTab:CreateSection("Enemies")
-
--- Kill Stump Snail
-local snailTimer = 0
-CombatTab:CreateToggle({
-    Name         = "Kill Stump Snail",
-    CurrentValue = false,
-    Flag         = "KillStump",
-    Callback     = function(val)
-        State.KillStump = val
-        if val then tpTo(FieldPositions["Stump Field"]) end
-    end,
-})
-
-RunService.Heartbeat:Connect(function(dt)
-    if not State.KillStump then return end
-    snailTimer += dt
-    if snailTimer < 0.2 then return end
-    snailTimer = 0
-
-    local snail = workspace:FindFirstChild("StumpSnail")
-               or workspace:FindFirstChild("Stump Snail")
-    if snail then
-        local snailRoot = snail:FindFirstChild("HumanoidRootPart")
-                       or snail.PrimaryPart
-        if snailRoot then
-            tpTo(snailRoot.Position)
-            fireTool("Basic Bee Swarm")
         end
     else
-        local center = FieldPositions["Stump Field"]
-        if center then
-            rootPart.CFrame = CFrame.new(center.X, center.Y + 3, center.Z)
-        end
+        -- Сбросить при выключении
+        farmPoints = {}
+        farmIdx    = 1
+        farmTimer  = 0
     end
+
+    -- ── АВТО КОП ───────────────────────────────────
+    if autoDig then
+        useTool("Scoop")
+        task.wait(0.15)
+    end
+
+    -- ── АВТО СПРИНКЛЕР ─────────────────────────────
+    if autoSprinkler then
+        useTool("Sprinkler")
+        task.wait(10)
+    end
+
+    -- ── УБИЙСТВО УЛИТКИ ────────────────────────────
+    if killSnail then
+        local snail = workspace:FindFirstChild("StumpSnail")
+                   or workspace:FindFirstChild("Stump Snail")
+        if snail then
+            local r = snail:FindFirstChild("HumanoidRootPart") or snail.PrimaryPart
+            if r then
+                root.CFrame = CFrame.new(r.Position.X, r.Position.Y + 3, r.Position.Z)
+                useTool("Basic Bee Swarm")
+            end
+        else
+            tp(Fields["Stump Field"])
+        end
+        task.wait(0.2)
+    end
+
+    -- ── УБИЙСТВО БОССОВ ────────────────────────────
+    if killBoss then
+        local bossNames = {"ViciousBee","Vicious Bee","MondoChick","Mondo Chick"}
+        for _, bn in ipairs(bossNames) do
+            local boss = workspace:FindFirstChild(bn)
+            if boss then
+                local r = boss:FindFirstChild("HumanoidRootPart") or boss.PrimaryPart
+                if r then
+                    local myHp = hum.Health / hum.MaxHealth
+                    if myHp < 0.5 then
+                        -- Отбежать
+                        local dir = (root.Position - r.Position).Unit
+                        root.CFrame = CFrame.new(root.Position + dir * 25)
+                    else
+                        root.CFrame = CFrame.new(r.Position.X, r.Position.Y + 3, r.Position.Z)
+                        useTool("Basic Bee Swarm")
+                    end
+                end
+                break
+            end
+        end
+        task.wait(0.2)
+    end
+
+    -- ── АВТО ПОСАДКА ───────────────────────────────
+    if autoPlant then
+        local center = Fields[selectedField]
+        if center and (center - root.Position).Magnitude < 30 then
+            useTool(selectedPlanter)
+        end
+        task.wait(5)
+    end
+
 end)
 
--- Kill Bosses
-local bossNames = { "ViciousBee", "Vicious Bee", "MondoChick", "Mondo Chick" }
-local bossTimer = 0
-CombatTab:CreateToggle({
-    Name         = "Kill Bosses",
+-- ══════════════════════════════════════════════════
+-- UI — ВКЛАДКИ
+-- ══════════════════════════════════════════════════
+
+-- ── MAIN ───────────────────────────────────────────
+local TabMain = Win:CreateTab("🏠 Main", 4483345998)
+TabMain:CreateSection("Утилиты")
+
+TabMain:CreateToggle({
+    Name = "Auto Sprinkler",
     CurrentValue = false,
-    Flag         = "KillBosses",
-    Callback     = function(val)
-        State.KillBosses = val
-    end,
+    Callback = function(v) autoSprinkler = v end,
 })
 
-RunService.Heartbeat:Connect(function(dt)
-    if not State.KillBosses then return end
-    bossTimer += dt
-    if bossTimer < 0.2 then return end
-    bossTimer = 0
-
-    for _, bossName in ipairs(bossNames) do
-        local boss = workspace:FindFirstChild(bossName)
-        if boss then
-            local bossRoot = boss:FindFirstChild("HumanoidRootPart")
-                          or boss.PrimaryPart
-            if bossRoot then
-                local hpPct = humanoid.Health / humanoid.MaxHealth
-                if hpPct < 0.5 then
-                    -- Отступить от босса
-                    local awayDir = (rootPart.Position - bossRoot.Position).Unit
-                    rootPart.CFrame = CFrame.new(
-                        rootPart.Position + awayDir * 20
-                    )
-                else
-                    tpTo(bossRoot.Position)
-                    fireTool("Basic Bee Swarm")
-                end
-            end
-            break
+-- Кнопка телепорта к выбранному полю
+TabMain:CreateButton({
+    Name = "⚡ Телепорт к полю",
+    Callback = function()
+        local c = Fields[selectedField]
+        if c then
+            tp(c)
+            Rayfield:Notify({ Title="TP", Content="Телепорт: "..selectedField, Duration=2 })
         end
-    end
-end)
-
--- ══════════════════════════════════════════════════
---  TAB 5 — CONFIGS
--- ══════════════════════════════════════════════════
-local ConfigTab = Window:CreateTab("⚙️ Configs", 4483345998)
-ConfigTab:CreateSection("Save / Load")
-
-ConfigTab:CreateButton({
-    Name     = "💾 Save Config",
-    Callback = function()
-        Rayfield:Notify({
-            Title    = "Config",
-            Content  = "✅ Config saved!",
-            Duration = 3,
-        })
     end,
 })
 
-ConfigTab:CreateButton({
-    Name     = "📂 Load Config",
+-- Дебаг: позиция
+TabMain:CreateButton({
+    Name = "📍 Моя позиция (консоль)",
     Callback = function()
-        Rayfield:Notify({
-            Title    = "Config",
-            Content  = "📂 Config loaded!",
-            Duration = 3,
-        })
+        print("POS:", root.Position)
+        Rayfield:Notify({ Title="Debug", Content=tostring(root.Position), Duration=3 })
     end,
 })
 
-ConfigTab:CreateSection("Debug")
+-- ── FARMING ────────────────────────────────────────
+local TabFarm = Win:CreateTab("🌻 Farming", 4483345998)
+TabFarm:CreateSection("Настройки")
 
--- Кнопка для диагностики — выводит позицию и объекты рядом
-ConfigTab:CreateButton({
-    Name     = "📍 Print My Position",
-    Callback = function()
-        print("📍 Позиция:", rootPart.Position)
-        print("=== Объекты рядом ===")
-        for _, obj in ipairs(workspace:GetDescendants()) do
-            if obj:IsA("BasePart") then
-                local dist = (obj.Position - rootPart.Position).Magnitude
-                if dist < 15 then
-                    print(obj:GetFullName(), "|", dist)
-                end
+TabFarm:CreateDropdown({
+    Name = "Select Field",
+    Options = FieldNames,
+    CurrentOption = {"Sunflower Field"},
+    MultipleOptions = false,
+    Callback = function(v)
+        selectedField = type(v) == "table" and v[1] or v
+        buildGrid(Fields[selectedField])
+        Rayfield:Notify({ Title="Field", Content="✅ "..selectedField, Duration=2 })
+    end,
+})
+
+TabFarm:CreateSection("Действия")
+
+TabFarm:CreateToggle({
+    Name = "Auto-Farm",
+    CurrentValue = false,
+    Callback = function(v)
+        autoFarm = v
+        if v then
+            local c = Fields[selectedField]
+            if c then
+                tp(c)
+                buildGrid(c)
             end
+            Rayfield:Notify({ Title="Farm", Content="🌻 Фарм: "..selectedField, Duration=3 })
         end
-        Rayfield:Notify({
-            Title    = "Debug",
-            Content  = "📍 Позиция в консоли!",
-            Duration = 3,
-        })
     end,
 })
 
-ConfigTab:CreateSection("Info")
-ConfigTab:CreateLabel("BSS Helper v2.0 | Rayfield UI | Xeno")
+TabFarm:CreateToggle({
+    Name = "Auto-Dig",
+    CurrentValue = false,
+    Callback = function(v) autoDig = v end,
+})
+
+-- ── PLANTERS ───────────────────────────────────────
+local TabPlant = Win:CreateTab("🪴 Planters", 4483345998)
+TabPlant:CreateSection("Настройки")
+
+TabPlant:CreateDropdown({
+    Name = "Select Planter",
+    Options = PlanterNames,
+    CurrentOption = {"Basic Planter"},
+    MultipleOptions = false,
+    Callback = function(v)
+        selectedPlanter = type(v) == "table" and v[1] or v
+    end,
+})
+
+TabPlant:CreateToggle({
+    Name = "Auto Plant",
+    CurrentValue = false,
+    Callback = function(v) autoPlant = v end,
+})
+
+-- ── COMBAT ─────────────────────────────────────────
+local TabCombat = Win:CreateTab("⚔️ Combat", 4483345998)
+TabCombat:CreateSection("Враги")
+
+TabCombat:CreateToggle({
+    Name = "Kill Stump Snail",
+    CurrentValue = false,
+    Callback = function(v)
+        killSnail = v
+        if v then tp(Fields["Stump Field"]) end
+    end,
+})
+
+TabCombat:CreateToggle({
+    Name = "Kill Bosses",
+    CurrentValue = false,
+    Callback = function(v) killBoss = v end,
+})
+
+-- ── CONFIGS ────────────────────────────────────────
+local TabCfg = Win:CreateTab("⚙️ Configs", 4483345998)
+TabCfg:CreateSection("Инфо")
+TabCfg:CreateLabel("BSS Helper v3.0 | Rayfield | Xeno")
+TabCfg:CreateLabel("Right CTRL = открыть / закрыть GUI")
 
 -- ══════════════════════════════════════════════════
---  RIGHT CTRL — TOGGLE GUI
+-- RIGHT CTRL — TOGGLE GUI
 -- ══════════════════════════════════════════════════
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if gameProcessed then return end
+UserInputService.InputBegan:Connect(function(input, gp)
+    if gp then return end
     if input.KeyCode == Enum.KeyCode.RightControl then
         Rayfield:Toggle()
     end
 end)
 
 -- ══════════════════════════════════════════════════
---  ОБНОВЛЕНИЕ CHAR ПРИ РЕСПАУНЕ
--- ══════════════════════════════════════════════════
-player.CharacterAdded:Connect(function(newChar)
-    char     = newChar
-    rootPart = newChar:WaitForChild("HumanoidRootPart")
-    humanoid = newChar:WaitForChild("Humanoid")
-    -- Сбросить все фармы при смерти
-    State.AutoFarm      = false
-    State.AutoDig       = false
-    State.KillStump     = false
-    State.KillBosses    = false
-    resetFarmGrid()
-end)
-
--- ══════════════════════════════════════════════════
---  СТАРТ
+-- СТАРТ
 -- ══════════════════════════════════════════════════
 Rayfield:Notify({
-    Title    = "🐝 BSS Helper v2.0",
-    Content  = "Загружено! Right CTRL = открыть/закрыть GUI",
-    Duration = 5,
+    Title   = "🐝 BSS Helper v3.0",
+    Content = "Загружено! Right CTRL = GUI",
+    Duration = 4,
 })
