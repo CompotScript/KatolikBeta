@@ -14,7 +14,7 @@ local rootPart = char:WaitForChild("HumanoidRootPart")
 local humanoid = char:WaitForChild("Humanoid")
 
 -- [ LOAD ORION LIBRARY ]
-local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/shlexware/Orion/main/source"))()
+local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/jensonhirst/Orion/main/source"))()
 
 -- [ CREATE WINDOW ]
 local Window = OrionLib:MakeWindow({
