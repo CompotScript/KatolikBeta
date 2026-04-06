@@ -1,46 +1,63 @@
 -- ╔══════════════════════════════════════════════════════════╗
--- ║          BSS Helper Script | Orion UI Library            ║
--- ║          Unobfuscated & Commented                        ║
+-- ║          BSS Helper Script | Rayfield UI Library         ║
+-- ║          Xeno Executor Compatible                        ║
+-- ║          Toggle GUI: Right CTRL                          ║
 -- ╚══════════════════════════════════════════════════════════╝
 
 -- [ SERVICES ]
-local Players       = game:GetService("Players")
-local RunService    = game:GetService("RunService")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players         = game:GetService("Players")
+local RunService      = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
 
-local player  = Players.LocalPlayer
-local char    = player.Character or player.CharacterAdded:Wait()
+local player   = Players.LocalPlayer
+local char     = player.Character or player.CharacterAdded:Wait()
 local rootPart = char:WaitForChild("HumanoidRootPart")
 local humanoid = char:WaitForChild("Humanoid")
 
--- [ LOAD ORION LIBRARY ]
-local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/jensonhirst/Orion/main/source"))()
+-- ══════════════════════════════════════════════════
+--  LOAD RAYFIELD
+-- ══════════════════════════════════════════════════
+local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 
 -- [ CREATE WINDOW ]
-local Window = OrionLib:MakeWindow({
-    Name            = "🐝 BSS Helper",
-    HidePremium     = false,
-    SaveConfig      = true,
-    ConfigFileName  = "BSSHelper",
-    IntroEnabled    = true,
-    IntroText       = "🐝 BSS Helper",
+local Window = Rayfield:CreateWindow({
+    Name                 = "🐝 BSS Helper",
+    Icon                 = 0,
+    LoadingTitle         = "🐝 BSS Helper",
+    LoadingSubtitle      = "by BSS Helper v1.0",
+    Theme                = "Default",
+    DisableRayfieldPrompts = false,
+    DisableBuildWarnings   = false,
+    ConfigurationSaving  = {
+        Enabled        = true,
+        FolderName     = "BSSHelper",
+        FileName       = "Config",
+    },
+    Discord = {
+        Enabled = false,
+    },
+    KeySystem = false,
 })
 
 -- ══════════════════════════════════════════════════
 --  GLOBAL STATE FLAGS
 -- ══════════════════════════════════════════════════
 local State = {
-    AutoFarm       = false,
-    AutoDig        = false,
-    AutoPlant      = false,
-    KillStump      = false,
-    KillBosses     = false,
-    AutoSprinkler  = false,
+    AutoFarm      = false,
+    AutoDig       = false,
+    AutoPlant     = false,
+    KillStump     = false,
+    KillBosses    = false,
+    AutoSprinkler = false,
     SelectedField  = "Sunflower Field",
-    SelectedPlanter= "Basic Planter",
+    SelectedPlanter = "Basic Planter",
 }
 
--- [ BSS FIELD LIST ]
+-- ══════════════════════════════════════════════════
+--  DATA TABLES
+-- ══════════════════════════════════════════════════
+
+-- Все поля BSS
 local Fields = {
     "Sunflower Field",
     "Dandelion Field",
@@ -60,28 +77,27 @@ local Fields = {
     "Mountain Top Field",
 }
 
--- [ FIELD BOUNDS TABLE ] 
--- CFrame positions approximated for each field
+-- Координаты центров полей
 local FieldPositions = {
-    ["Sunflower Field"]    = Vector3.new(185, 4, -85),
-    ["Dandelion Field"]    = Vector3.new(68,  4, -93),
-    ["Mushroom Field"]     = Vector3.new(-29, 4, -152),
-    ["Blue Flower Field"]  = Vector3.new(-135,4, -35),
-    ["Clover Field"]       = Vector3.new(52,  4, -5),
-    ["Spider Field"]       = Vector3.new(-95, 4, -200),
-    ["Strawberry Field"]   = Vector3.new(130, 4, -155),
-    ["Bamboo Field"]       = Vector3.new(-200,4, -110),
-    ["Pineapple Field"]    = Vector3.new(290, 4, -105),
-    ["Stump Field"]        = Vector3.new(-48, 4, -350),
-    ["Coconut Field"]      = Vector3.new(50,  4, -380),
-    ["Pumpkin Field"]      = Vector3.new(-190,4, -305),
-    ["Pine Tree Forest"]   = Vector3.new(-315,4, -185),
-    ["Rose Field"]         = Vector3.new(195, 4, -280),
-    ["Pepper Field"]       = Vector3.new(95,  4, -260),
+    ["Sunflower Field"]    = Vector3.new(185,  4,  -85),
+    ["Dandelion Field"]    = Vector3.new(68,   4,  -93),
+    ["Mushroom Field"]     = Vector3.new(-29,  4, -152),
+    ["Blue Flower Field"]  = Vector3.new(-135, 4,  -35),
+    ["Clover Field"]       = Vector3.new(52,   4,   -5),
+    ["Spider Field"]       = Vector3.new(-95,  4, -200),
+    ["Strawberry Field"]   = Vector3.new(130,  4, -155),
+    ["Bamboo Field"]       = Vector3.new(-200, 4, -110),
+    ["Pineapple Field"]    = Vector3.new(290,  4, -105),
+    ["Stump Field"]        = Vector3.new(-48,  4, -350),
+    ["Coconut Field"]      = Vector3.new(50,   4, -380),
+    ["Pumpkin Field"]      = Vector3.new(-190, 4, -305),
+    ["Pine Tree Forest"]   = Vector3.new(-315, 4, -185),
+    ["Rose Field"]         = Vector3.new(195,  4, -280),
+    ["Pepper Field"]       = Vector3.new(95,   4, -260),
     ["Mountain Top Field"] = Vector3.new(0,   65, -480),
 }
 
--- [ PLANTER LIST ]
+-- Список планеров
 local PlanterList = {
     "Basic Planter",
     "Planter",
@@ -98,73 +114,71 @@ local PlanterList = {
 --  HELPER FUNCTIONS
 -- ══════════════════════════════════════════════════
 
--- Teleport character to a position safely
+-- Телепорт персонажа в точку
 local function tpTo(pos)
     if rootPart then
-        rootPart.CFrame = CFrame.new(pos)
+        rootPart.CFrame = CFrame.new(pos + Vector3.new(0, 3, 0))
     end
 end
 
--- Walk toward a position (no teleport — uses Humanoid target)
+-- Движение к точке через Humanoid
 local function walkTo(pos)
     if humanoid then
         humanoid:MoveTo(pos)
     end
 end
 
--- Simulate a tool activation (digging / planting / sprinkler)
+-- Активация инструмента из рюкзака
 local function fireTool(toolName)
     local tool = player.Backpack:FindFirstChild(toolName)
-        or char:FindFirstChild(toolName)
-    if tool then
-        -- Equip and activate
-        humanoid:EquipTool(tool)
-        task.wait(0.1)
-        local event = tool:FindFirstChild("Activate")
-            or tool:FindFirstChildOfClass("RemoteEvent")
-        if event then
-            event:FireServer()
-        else
-            -- fallback: use ClickDetector in workspace
-            local act = tool:FindFirstChild("Handle")
-            if act then
-                fireproximityprompt = act:FindFirstChildOfClass("ClickDetector")
-                if fireproximityprompt then
-                    fireproximityprompt:FireServer()
-                end
-            end
+               or char:FindFirstChild(toolName)
+    if not tool then return end
+
+    -- Экипировать инструмент
+    humanoid:EquipTool(tool)
+    task.wait(0.1)
+
+    -- Попытка активировать через RemoteEvent
+    local handle = tool:FindFirstChild("Handle")
+    if handle then
+        local click = handle:FindFirstChildOfClass("ClickDetector")
+        if click then
+            fireclickdetector(click)
+            return
         end
+    end
+
+    -- Fallback: через RemoteEvent внутри инструмента
+    local remote = tool:FindFirstChildOfClass("RemoteEvent")
+    if remote then
+        remote:FireServer()
     end
 end
 
 -- ══════════════════════════════════════════════════
 --  TAB 1: MAIN
 -- ══════════════════════════════════════════════════
-local MainTab = Window:MakeTab({
-    Name = "🏠 Main",
-    Icon = "rbxassetid://4483345998",
-    PremiumOnly = false,
-})
+local MainTab = Window:CreateTab("🏠 Main", 4483345998)
 
-MainTab:AddSection({ Name = "Sprinkler" })
+MainTab:CreateSection("Sprinkler")
 
--- AUTO SPRINKLER: places sprinkler every 10 seconds
-MainTab:AddToggle({
-    Name    = "Auto Sprinkler",
-    Default = false,
-    Callback = function(val)
+-- Авто-спринклер каждые 10 секунд
+MainTab:CreateToggle({
+    Name        = "Auto Sprinkler",
+    CurrentValue = false,
+    Flag        = "AutoSprinkler",
+    Callback    = function(val)
         State.AutoSprinkler = val
     end,
 })
 
--- RunService loop for Auto Sprinkler
+-- Таймер спринклера
 local sprinklerTimer = 0
 RunService.Heartbeat:Connect(function(dt)
     if not State.AutoSprinkler then return end
-    sprinklerTimer = sprinklerTimer + dt
+    sprinklerTimer += dt
     if sprinklerTimer >= 10 then
         sprinklerTimer = 0
-        -- Place sprinkler tool (named "Sprinkler" in backpack)
         fireTool("Sprinkler")
         task.wait(0.5)
     end
@@ -173,128 +187,128 @@ end)
 -- ══════════════════════════════════════════════════
 --  TAB 2: FARMING
 -- ══════════════════════════════════════════════════
-local FarmTab = Window:MakeTab({
-    Name = "🌻 Farming",
-    Icon = "rbxassetid://4483345998",
-    PremiumOnly = false,
-})
+local FarmTab = Window:CreateTab("🌻 Farming", 4483345998)
 
-FarmTab:AddSection({ Name = "Field Settings" })
+FarmTab:CreateSection("Field Settings")
 
--- DROPDOWN: Select Field
-FarmTab:AddDropdown({
+-- Дропдаун выбора поля
+FarmTab:CreateDropdown({
     Name    = "Select Field",
-    Default = "Sunflower Field",
     Options = Fields,
+    CurrentOption = {"Sunflower Field"},
+    MultipleOptions = false,
+    Flag    = "SelectedField",
     Callback = function(val)
-        State.SelectedField = val
+        -- Rayfield возвращает таблицу даже при MultipleOptions = false
+        State.SelectedField = type(val) == "table" and val[1] or val
     end,
 })
 
-FarmTab:AddSection({ Name = "Actions" })
+FarmTab:CreateSection("Actions")
 
--- TOGGLE: Auto-Farm
--- Walks in a small patrol pattern inside the selected field
--- and collects tokens by proximity
+-- Авто-фарм: патрулирует поле и собирает токены
 local farmAngle = 0
-FarmTab:AddToggle({
-    Name    = "Auto-Farm",
-    Default = false,
-    Callback = function(val)
+local farmTimer = 0
+FarmTab:CreateToggle({
+    Name         = "Auto-Farm",
+    CurrentValue = false,
+    Flag         = "AutoFarm",
+    Callback     = function(val)
         State.AutoFarm = val
     end,
 })
 
--- RunService loop: patrol within field
-local farmTimer = 0
 RunService.Heartbeat:Connect(function(dt)
     if not State.AutoFarm then return end
-    farmTimer = farmTimer + dt
-    if farmTimer < 2 then return end  -- move every 2 s
+    farmTimer += dt
+    if farmTimer < 2 then return end
     farmTimer = 0
 
     local base = FieldPositions[State.SelectedField]
     if not base then return end
 
-    -- Walk to a random offset within ±15 studs of field center
-    farmAngle = farmAngle + 45  -- rotate patrol point
-    local rad = math.rad(farmAngle)
+    -- Патрульное движение по кругу внутри поля
+    farmAngle += 45
+    local rad    = math.rad(farmAngle)
     local offset = Vector3.new(math.cos(rad) * 12, 0, math.sin(rad) * 12)
     walkTo(base + offset)
 
-    -- Collect any nearby tokens
+    -- Сбор ближайших токенов
     local tokens = workspace:FindFirstChild("Tokens")
-        or workspace:FindFirstChild("Collectables")
+                or workspace:FindFirstChild("Collectables")
     if tokens then
         for _, token in ipairs(tokens:GetChildren()) do
-            local dist = (token.Position - rootPart.Position).Magnitude
-            if dist < 6 then
-                -- Teleport onto token to pick it up
-                tpTo(token.Position)
-                task.wait(0.05)
+            local part = token:IsA("BasePart") and token
+                      or token:FindFirstChildOfClass("BasePart")
+            if part then
+                local dist = (part.Position - rootPart.Position).Magnitude
+                if dist < 6 then
+                    tpTo(part.Position)
+                    task.wait(0.05)
+                end
             end
         end
     end
 end)
 
--- TOGGLE: Auto-Dig (rapid clicking the dig tool)
-FarmTab:AddToggle({
-    Name    = "Auto-Dig",
-    Default = false,
-    Callback = function(val)
+-- Авто-коп: быстрый клик инструментом "Scoop"
+local digTimer = 0
+FarmTab:CreateToggle({
+    Name         = "Auto-Dig",
+    CurrentValue = false,
+    Flag         = "AutoDig",
+    Callback     = function(val)
         State.AutoDig = val
     end,
 })
 
-local digTimer = 0
 RunService.Heartbeat:Connect(function(dt)
     if not State.AutoDig then return end
-    digTimer = digTimer + dt
-    if digTimer < 0.15 then return end  -- 150 ms between clicks
+    digTimer += dt
+    if digTimer < 0.15 then return end
     digTimer = 0
-    fireTool("Scoop")          -- typical dig tool name in BSS
+    fireTool("Scoop")
 end)
 
 -- ══════════════════════════════════════════════════
 --  TAB 3: PLANTERS
 -- ══════════════════════════════════════════════════
-local PlantTab = Window:MakeTab({
-    Name = "🪴 Planters",
-    Icon = "rbxassetid://4483345998",
-    PremiumOnly = false,
-})
+local PlantTab = Window:CreateTab("🪴 Planters", 4483345998)
 
-PlantTab:AddSection({ Name = "Planter Settings" })
+PlantTab:CreateSection("Planter Settings")
 
--- DROPDOWN: Select Planter
-PlantTab:AddDropdown({
+-- Дропдаун выбора планера
+PlantTab:CreateDropdown({
     Name    = "Select Planter",
-    Default = "Basic Planter",
     Options = PlanterList,
+    CurrentOption = {"Basic Planter"},
+    MultipleOptions = false,
+    Flag    = "SelectedPlanter",
     Callback = function(val)
-        State.SelectedPlanter = val
+        State.SelectedPlanter = type(val) == "table" and val[1] or val
     end,
 })
 
-PlantTab:AddSection({ Name = "Auto Plant" })
+PlantTab:CreateSection("Auto Plant")
 
--- TOGGLE: Auto Plant
-PlantTab:AddToggle({
-    Name    = "Auto Plant",
-    Default = false,
-    Callback = function(val)
+-- Авто-посадка рядом с полем
+local plantTimer = 0
+PlantTab:CreateToggle({
+    Name         = "Auto Plant",
+    CurrentValue = false,
+    Flag         = "AutoPlant",
+    Callback     = function(val)
         State.AutoPlant = val
     end,
 })
 
-local plantTimer = 0
 RunService.Heartbeat:Connect(function(dt)
     if not State.AutoPlant then return end
-    plantTimer = plantTimer + dt
-    if plantTimer < 5 then return end  -- try every 5 s
+    plantTimer += dt
+    if plantTimer < 5 then return end
     plantTimer = 0
 
-    -- Check if near a field before planting
+    -- Проверить близость к полю
     local nearField = false
     for _, pos in pairs(FieldPositions) do
         if (pos - rootPart.Position).Magnitude < 30 then
@@ -312,67 +326,59 @@ end)
 -- ══════════════════════════════════════════════════
 --  TAB 4: COMBAT
 -- ══════════════════════════════════════════════════
-local CombatTab = Window:MakeTab({
-    Name = "⚔️ Combat",
-    Icon = "rbxassetid://4483345998",
-    PremiumOnly = false,
-})
+local CombatTab = Window:CreateTab("⚔️ Combat", 4483345998)
 
-CombatTab:AddSection({ Name = "Enemies" })
+CombatTab:CreateSection("Enemies")
 
--- TOGGLE: Kill Stump Snail
--- Stays near Stump Field and attacks the Stump Snail
-CombatTab:AddToggle({
-    Name    = "Kill Stump Snail",
-    Default = false,
-    Callback = function(val)
+-- Kill Stump Snail: держится у Stump Field и атакует улитку
+local snailTimer = 0
+CombatTab:CreateToggle({
+    Name         = "Kill Stump Snail",
+    CurrentValue = false,
+    Flag         = "KillStump",
+    Callback     = function(val)
         State.KillStump = val
         if val then
-            -- Teleport to stump field first
             tpTo(FieldPositions["Stump Field"])
         end
     end,
 })
 
-local snailTimer = 0
 RunService.Heartbeat:Connect(function(dt)
     if not State.KillStump then return end
-    snailTimer = snailTimer + dt
+    snailTimer += dt
     if snailTimer < 0.2 then return end
     snailTimer = 0
 
-    -- Find the Stump Snail mob in workspace
     local snail = workspace:FindFirstChild("StumpSnail")
-        or workspace:FindFirstChild("Stump Snail")
+               or workspace:FindFirstChild("Stump Snail")
     if snail then
         local snailRoot = snail:FindFirstChild("HumanoidRootPart")
-            or snail.PrimaryPart
+                       or snail.PrimaryPart
         if snailRoot then
-            -- Teleport on top of snail and swing tool
             tpTo(snailRoot.Position + Vector3.new(0, 2, 0))
-            fireTool("Basic Bee Swarm")  -- main combat tool
+            fireTool("Basic Bee Swarm")
         end
     else
-        -- Stay at stump field center if snail not found yet
         walkTo(FieldPositions["Stump Field"])
     end
 end)
 
--- TOGGLE: Kill Bosses (ViciousBee / MondoChick)
--- Attacks bosses and strafes away when health < 50%
-CombatTab:AddToggle({
-    Name    = "Kill Bosses",
-    Default = false,
-    Callback = function(val)
+-- Kill Bosses: атакует ViciousBee / MondoChick, отступает при низком HP
+local bossNames = { "ViciousBee", "Vicious Bee", "MondoChick", "Mondo Chick" }
+local bossTimer = 0
+CombatTab:CreateToggle({
+    Name         = "Kill Bosses",
+    CurrentValue = false,
+    Flag         = "KillBosses",
+    Callback     = function(val)
         State.KillBosses = val
     end,
 })
 
-local bossNames = { "ViciousBee", "Vicious Bee", "MondoChick", "Mondo Chick" }
-local bossTimer = 0
 RunService.Heartbeat:Connect(function(dt)
     if not State.KillBosses then return end
-    bossTimer = bossTimer + dt
+    bossTimer += dt
     if bossTimer < 0.2 then return end
     bossTimer = 0
 
@@ -380,25 +386,21 @@ RunService.Heartbeat:Connect(function(dt)
         local boss = workspace:FindFirstChild(bossName)
         if boss then
             local bossRoot = boss:FindFirstChild("HumanoidRootPart")
-                or boss.PrimaryPart
+                          or boss.PrimaryPart
             local bossHum  = boss:FindFirstChildOfClass("Humanoid")
             if bossRoot and bossHum then
-                local myHP  = humanoid.Health
-                local maxHP = humanoid.MaxHealth
-                local hpPct = myHP / maxHP
-
+                local hpPct = humanoid.Health / humanoid.MaxHealth
                 if hpPct < 0.5 then
-                    -- Strafe AWAY from boss when low HP
+                    -- Отступить от босса
                     local awayDir = (rootPart.Position - bossRoot.Position).Unit
-                    local safePos = rootPart.Position + awayDir * 20
-                    tpTo(safePos)
+                    tpTo(rootPart.Position + awayDir * 20)
                 else
-                    -- Move toward boss and attack
+                    -- Атаковать босса
                     tpTo(bossRoot.Position + Vector3.new(0, 2, 0))
                     fireTool("Basic Bee Swarm")
                 end
             end
-            break  -- handle one boss at a time
+            break
         end
     end
 end)
@@ -406,54 +408,53 @@ end)
 -- ══════════════════════════════════════════════════
 --  TAB 5: CONFIGS
 -- ══════════════════════════════════════════════════
-local ConfigTab = Window:MakeTab({
-    Name = "⚙️ Configs",
-    Icon = "rbxassetid://4483345998",
-    PremiumOnly = false,
-})
+local ConfigTab = Window:CreateTab("⚙️ Configs", 4483345998)
 
-ConfigTab:AddSection({ Name = "Saved Config" })
+ConfigTab:CreateSection("Save / Load")
 
--- Save config button
-ConfigTab:AddButton({
-    Name = "💾 Save Config",
+ConfigTab:CreateButton({
+    Name     = "💾 Save Config",
     Callback = function()
-        OrionLib:MakeNotification({
-            Name    = "Config",
-            Content = "✅ Config saved!",
-            Image   = "rbxassetid://4483345998",
-            Time    = 3,
-        })
-        -- Orion auto-saves toggles / dropdowns via SaveConfig = true
-    end,
-})
-
--- Load config button
-ConfigTab:AddButton({
-    Name = "📂 Load Config",
-    Callback = function()
-        OrionLib:MakeNotification({
-            Name    = "Config",
-            Content = "📂 Config loaded!",
-            Image   = "rbxassetid://4483345998",
-            Time    = 3,
+        Rayfield:Notify({
+            Title    = "Config",
+            Content  = "✅ Config saved!",
+            Duration = 3,
         })
     end,
 })
 
-ConfigTab:AddSection({ Name = "Info" })
+ConfigTab:CreateButton({
+    Name     = "📂 Load Config",
+    Callback = function()
+        Rayfield:Notify({
+            Title    = "Config",
+            Content  = "📂 Config loaded!",
+            Duration = 3,
+        })
+    end,
+})
 
-ConfigTab:AddLabel("Script by: BSS Helper v1.0")
-ConfigTab:AddLabel("Orion UI Library")
+ConfigTab:CreateSection("Info")
+ConfigTab:CreateLabel("BSS Helper v1.0 | Rayfield UI")
 
 -- ══════════════════════════════════════════════════
---  INIT
+--  RIGHT CTRL — TOGGLE GUI VISIBILITY
 -- ══════════════════════════════════════════════════
-OrionLib:Init()
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    -- gameProcessed = true означает что игра уже обработала ввод (чат и т.д.)
+    if gameProcessed then return end
 
-OrionLib:MakeNotification({
-    Name    = "🐝 BSS Helper",
-    Content = "Script loaded successfully!",
-    Image   = "rbxassetid://4483345998",
-    Time    = 5,
+    if input.KeyCode == Enum.KeyCode.RightControl then
+        -- Rayfield имеет встроенный метод скрытия/показа
+        Rayfield:Toggle()
+    end
+end)
+
+-- ══════════════════════════════════════════════════
+--  УВЕДОМЛЕНИЕ О ЗАГРУЗКЕ
+-- ══════════════════════════════════════════════════
+Rayfield:Notify({
+    Title    = "🐝 BSS Helper",
+    Content  = "Script loaded! Press Right CTRL to toggle GUI.",
+    Duration = 5,
 })
